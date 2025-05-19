@@ -23,14 +23,66 @@ if 'nlp' not in st.session_state:
 if 'language' not in st.session_state:
     st.session_state.language = "ja"
 
-# 言語モデルの辞書
-language_models = {
-    "ja": "ja_core_news_sm",
-    "en": "en_core_web_sm",
-    "zh": "zh_core_web_sm",
-    "ko": "ko_core_news_sm",
-    "fr": "fr_core_news_sm"
+# # 言語モデルの辞書
+# language_models = {
+#     "ja": "ja_core_news_sm",
+#     "en": "en_core_web_sm",
+#     "zh": "zh_core_web_sm",
+#     "ko": "ko_core_news_sm",
+#     "fr": "fr_core_news_sm"
+# }
+#
+# # サイドバー - 言語選択
+# language_options = {
+#     "ja": "日本語",
+#     "en": "英語",
+#     "zh": "中国語",
+#     "ko": "韓国語",
+#     "fr": "フランス語"
+# }
+# selected_language = st.sidebar.selectbox(
+#     "言語を選択してください",
+#     options=list(language_options.keys()),
+#     format_func=lambda x: language_options[x],
+#     index=0
+# )
+#
+#
+# # 言語モデルのロード
+# @st.cache_resource
+# def load_nlp_model(lang):
+#     try:
+#         return spacy.load(language_models[lang])
+#     except OSError:
+#         st.warning(f"{language_options[lang]}モデルをダウンロードしています...")
+#         spacy.cli.download(language_models[lang])
+#         return spacy.load(language_models[lang])
+#
+#
+# if selected_language != st.session_state.language:
+#     st.session_state.language = selected_language
+#     st.session_state.nlp = load_nlp_model(selected_language)
+# elif st.session_state.nlp is None:
+#     st.session_state.nlp = load_nlp_model(selected_language)
+
+# 言語モデルの基本名
+language_base = {
+    "ja": "ja_core_news",
+    "en": "en_core_web",
+    "zh": "zh_core_web",
+    "ko": "ko_core_news",
+    "fr": "fr_core_news"
 }
+
+# モデルサイズの辞書
+model_sizes = {
+    "sm": "小 (sm)",
+    "md": "中 (md)",
+    "lg": "大 (lg)"
+}
+
+if 'model_size' not in st.session_state:
+    st.session_state.model_size = "sm"
 
 # サイドバー - 言語選択
 language_options = {
@@ -47,23 +99,47 @@ selected_language = st.sidebar.selectbox(
     index=0
 )
 
+# サイドバー - モデルサイズ選択
+selected_size = st.sidebar.selectbox(
+    "モデルサイズを選択してください",
+    options=list(model_sizes.keys()),
+    format_func=lambda x: model_sizes[x],
+    index=0,
+    help="大きいモデルほど精度が高くなりますが、読み込みと処理に時間がかかります"
+)
+
+# 言語またはサイズが変更されたときにモデルを再ロードする条件を更新します:
+if 'language' not in st.session_state:
+    st.session_state.language = selected_language
+    st.session_state.model_size = selected_size
+    st.session_state.nlp = None
+
+if selected_language != st.session_state.language or selected_size != st.session_state.model_size:
+    st.session_state.language = selected_language
+    st.session_state.model_size = selected_size
+    st.session_state.nlp = None
 
 # 言語モデルのロード
 @st.cache_resource
-def load_nlp_model(lang):
+def load_nlp_model(lang, size):
+    model_name = f"{language_base[lang]}_{size}"
     try:
-        return spacy.load(language_models[lang])
+        return spacy.load(model_name)
     except OSError:
-        st.warning(f"{language_options[lang]}モデルをダウンロードしています...")
-        spacy.cli.download(language_models[lang])
-        return spacy.load(language_models[lang])
+        st.warning(f"{language_options[lang]}の{model_sizes[size]}モデルをダウンロードしています...")
+        spacy.cli.download(model_name)
+        return spacy.load(model_name)
+
+if st.session_state.nlp is None:
+    st.session_state.nlp = load_nlp_model(selected_language, selected_size)
+
+nlp = st.session_state.nlp
+
+# 現在のモデル情報を表示
+st.sidebar.info(f"現在のモデル: {language_base[selected_language]}_{selected_size}")
 
 
-if selected_language != st.session_state.language:
-    st.session_state.language = selected_language
-    st.session_state.nlp = load_nlp_model(selected_language)
-elif st.session_state.nlp is None:
-    st.session_state.nlp = load_nlp_model(selected_language)
+
 
 # ファイルアップロード
 uploaded_file = st.sidebar.file_uploader("CSVファイルをアップロードしてください", type=["csv"])
