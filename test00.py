@@ -24,8 +24,8 @@ import tempfile
 import streamlit.components.v1 as components
 
 # アプリケーションのタイトル
-st.set_page_config(page_title="授業記録分析ツール", layout="wide")
-st.title("授業記録分析ツール")
+st.set_page_config(page_title="LAT35 on the web: making concept", layout="wide")
+st.title("LAT35 on the web: making concept")
 
 # セッション状態の初期化
 if 'data' not in st.session_state:
@@ -52,7 +52,7 @@ language_base = {
 model_sizes = {
     "sm": "小 (sm)",
     "md": "中 (md)",
-    "lg": "大 (lg)"
+    # "lg": "大 (lg)"
 }
 
 # サイドバー - 言語選択
@@ -108,18 +108,17 @@ st.sidebar.info(f"現在のモデル: {language_base[selected_language]}_{select
 
 # アプリケーションの説明
 st.markdown("""
-## 授業記録分析ツール
+このツールは、概念辞書を作成しながら、CSV形式の授業記録を分析するためのものです。概念辞書を作成するときは、AND、OR、NOTを使って、どのような語が含まれている／含まれていない発言に、どのような概念を付けるかを検討します。その際、KWIC分析をして、発言に含まれている語（あるいは形態素解析されている語）を把握します。作った概念が、発言のどこに現れるか、ほかの概念とどのように出現し合うかなどを、概念分析・可視化タブやネットワーク分析タブで確認します。
 
-このツールは、CSV形式の授業記録を分析します。
 **CSVファイル要件:**
 - 「発言番号」「発言者」「発言内容」の3つの列が必要です
 - 文字コードはUTF-8を推奨します
 
 **分析機能:**
-1. **KWIC分析**: 特定の単語やフレーズの前後の文脈を表示
-2. **概念辞書作成**: ANDとORを使った概念の定義
-3. **概念分析・可視化**: 概念に基づく発言の分析と可視化
-4. **ネットワーク分析**: 概念と発言の関係性をネットワーク図で表示
+1. KWIC分析: 特定の単語やフレーズの前後の文脈を表示
+2. 概念辞書作成: ANDとORを使った概念の定義
+3. 概念分析・可視化: 概念に基づく発言の分析と可視化
+4. ネットワーク分析: 概念と発言の関係性をネットワーク図で表示
 """)
 
 # ファイルアップロード（より目立つように装飾）
@@ -187,22 +186,22 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("概念辞書のエクスポート/インポート")
 
 # エクスポート
-if st.session_state.concepts and st.sidebar.button("概念辞書をエクスポート"):
+if st.session_state.concepts and st.sidebar.button("Export concept dictionary"):
     concepts_json = json.dumps(st.session_state.concepts, ensure_ascii=False, indent=2)
     st.sidebar.download_button(
-        label="JSONファイルをダウンロード",
+        label="download JSON file",
         data=concepts_json,
         file_name="concept_dictionary.json",
         mime="application/json"
     )
 
 # インポート
-uploaded_concepts = st.sidebar.file_uploader("概念辞書をインポート", type=["json"], key="concept_uploader")
+uploaded_concepts = st.sidebar.file_uploader("Import concept dictionary", type=["json"], key="concept_uploader")
 if uploaded_concepts is not None:
     try:
         imported_concepts = json.load(uploaded_concepts)
         st.session_state.concepts.update(imported_concepts)
-        st.sidebar.success("概念辞書がインポートされました。")
+        st.sidebar.success("imported concept dictionary")
     except Exception as e:
         st.sidebar.error(f"インポート中にエラーが発生しました: {e}")
 
@@ -211,7 +210,7 @@ if st.session_state.data is not None:
     st.success(f"CSVファイルが読み込まれています。発言数: {len(st.session_state.data)}件")
 
     # データサンプルを表示
-    with st.expander("データプレビュー"):
+    with st.expander("data view"):
         st.dataframe(st.session_state.data.head())
 else:
     st.info("サイドバーからCSVファイルをアップロードしてください。")
@@ -272,6 +271,7 @@ with tab2:
     if st.session_state.data is not None:
         st.markdown("""
         概念辞書を作成します。例: 「救急」という概念は「(病気 OR 痛み OR 風邪) AND (急ぎ OR 急病 OR 救急車)」のように表現できます。
+        また、NOT条件で特定の単語を除外することもできます。
         """)
 
         concept_name = st.text_input("概念名を入力してください")
@@ -284,9 +284,11 @@ with tab2:
 
             # 既存の概念を編集する場合
             editing_concept = None
+            exclude_terms = []
             if concept_name and concept_name in st.session_state.concepts:
                 editing_concept = st.session_state.concepts[concept_name]
                 and_groups = editing_concept.get("and_groups", [])
+                exclude_terms = editing_concept.get("exclude_terms", [])
 
             # 動的にANDグループを追加
             num_and_groups = st.number_input("ANDグループ数", min_value=1, value=len(and_groups) if and_groups else 1)
@@ -310,12 +312,26 @@ with tab2:
                 or_terms_list = [term.strip() for term in or_terms.split("\n") if term.strip()]
                 new_and_groups.append(or_terms_list)
 
+            # NOT条件（除外語）の入力
+            st.subheader("NOT条件（除外語）")
+            st.markdown("これらの単語が含まれる発言は、他の条件を満たしていても除外されます。")
+            exclude_terms_text = st.text_area(
+                "除外する単語（各行に1つの単語）",
+                value="\n".join(exclude_terms) if exclude_terms else "",
+                height=100,
+                key="exclude_terms"
+            )
+
+            # 空白行を除去して配列に変換
+            new_exclude_terms = [term.strip() for term in exclude_terms_text.split("\n") if term.strip()]
+
         # 概念の保存
         if st.button("概念を保存"):
             if concept_name:
                 st.session_state.concepts[concept_name] = {
                     "name": concept_name,
-                    "and_groups": new_and_groups
+                    "and_groups": new_and_groups,
+                    "exclude_terms": new_exclude_terms
                 }
                 st.success(f"概念「{concept_name}」が保存されました。")
             else:
@@ -336,7 +352,16 @@ with tab2:
                             or_expr = " OR ".join([f'"{term}"' for term in or_group])
                             expression.append(f"({or_expr})")
 
-                        st.markdown(" AND ".join(expression))
+                        # AND条件の表示
+                        and_expr = " AND ".join(expression)
+
+                        # NOT条件の表示
+                        exclude_terms = concept.get("exclude_terms", [])
+                        if exclude_terms:
+                            not_expr = " OR ".join([f'"{term}"' for term in exclude_terms])
+                            st.markdown(f"{and_expr} NOT ({not_expr})")
+                        else:
+                            st.markdown(and_expr)
             else:
                 st.info("保存された概念はありません。")
 
@@ -375,7 +400,16 @@ with tab3:
                         all_and_conditions_met = False
                         break
 
-                if all_and_conditions_met:
+                # 除外語のチェック
+                exclude_terms = concept.get("exclude_terms", [])
+                has_exclude_term = False
+                for term in exclude_terms:
+                    if term.lower() in text:
+                        has_exclude_term = True
+                        break
+
+                # ANDグループの条件を満たし、除外語を含まない場合のみマッチ
+                if all_and_conditions_met and not has_exclude_term:
                     matches.append({
                         "発言番号": row["発言番号"],
                         "発言者": row["発言者"],
@@ -604,7 +638,16 @@ with tab4:
                             all_and_conditions_met = False
                             break
 
-                    if all_and_conditions_met:
+                    # 除外語のチェック
+                    exclude_terms = concept.get("exclude_terms", [])
+                    has_exclude_term = False
+                    for term in exclude_terms:
+                        if term.lower() in text:
+                            has_exclude_term = True
+                            break
+
+                    # ANDグループの条件を満たし、除外語を含まない場合のみマッチ
+                    if all_and_conditions_met and not has_exclude_term:
                         matches.append(row["発言番号"])
 
                 concept_matches[concept_name] = matches
@@ -702,7 +745,16 @@ with tab4:
                             all_and_conditions_met = False
                             break
 
-                    if all_and_conditions_met:
+                    # 除外語のチェック
+                    exclude_terms = concept.get("exclude_terms", [])
+                    has_exclude_term = False
+                    for term in exclude_terms:
+                        if term.lower() in text:
+                            has_exclude_term = True
+                            break
+
+                    # ANDグループの条件を満たし、除外語を含まない場合のみマッチ
+                    if all_and_conditions_met and not has_exclude_term:
                         speaker_concept_counts[speaker][concept_name] += 1
 
             # NetworkXグラフを作成
@@ -906,7 +958,16 @@ with tab4:
                                 all_and_conditions_met = False
                                 break
 
-                        if all_and_conditions_met:
+                        # 除外語のチェック
+                        exclude_terms = concept.get("exclude_terms", [])
+                        has_exclude_term = False
+                        for term in exclude_terms:
+                            if term.lower() in text:
+                                has_exclude_term = True
+                                break
+
+                        # ANDグループの条件を満たし、除外語を含まない場合のみマッチ
+                        if all_and_conditions_met and not has_exclude_term:
                             utterance_concept_matrix[i, j] = 1
 
                 # 発言間のコサイン類似度を計算
@@ -994,7 +1055,16 @@ with tab4:
                                 all_and_conditions_met = False
                                 break
 
-                        if all_and_conditions_met:
+                        # 除外語のチェック
+                        exclude_terms = concept.get("exclude_terms", [])
+                        has_exclude_term = False
+                        for term in exclude_terms:
+                            if term.lower() in text:
+                                has_exclude_term = True
+                                break
+
+                        # ANDグループの条件を満たし、除外語を含まない場合のみマッチ
+                        if all_and_conditions_met and not has_exclude_term:
                             utterance_concept_matrix[i, j] = 1
 
                 # 発言と概念を結合した行列を作成
